@@ -17,6 +17,16 @@ function dayName(d){
   return d.toLocaleDateString(undefined, { weekday:"long" });
 }
 
+// 🔹 NEW: 24h → 12h time formatter
+function formatTime12h(timeStr){
+  if(!timeStr) return "";
+  let [h, m] = timeStr.split(":").map(Number);
+  const ampm = h >= 12 ? "pm" : "am";
+  h = h % 12;
+  if(h === 0) h = 12;
+  return `${h}:${m.toString().padStart(2,"0")} ${ampm}`;
+}
+
 function parseTimeToMinutes(timeStr){
   if(!timeStr) return null;
   const [hh, mm] = timeStr.split(":").map(Number);
@@ -27,7 +37,7 @@ function parseTimeToMinutes(timeStr){
 function minutesDiff(startMin, endMin){
   if(startMin == null || endMin == null) return 0;
   let diff = endMin - startMin;
-  if(diff < 0) diff += 24*60; // overnight
+  if(diff < 0) diff += 24*60;
   return diff;
 }
 
@@ -41,7 +51,7 @@ function anyHoursEntered(){
   return false;
 }
 
-// Build rows based on Week Starting (THIS IS THE FIX)
+// Build rows
 function buildRowsFromWeekStarting(){
   const weekStr = $("#weekStarting").value;
 
@@ -62,61 +72,34 @@ function buildRowsFromWeekStarting(){
 
   for(let i=0;i<ROWS;i++){
     if(i===0){
-      const div = document.createElement("tr");
-      div.className = "week-divider";
-      div.innerHTML = `<td colspan="8">Week 1</td>`;
-      body.appendChild(div);
+      body.insertAdjacentHTML("beforeend", `<tr class="week-divider"><td colspan="8">Week 1</td></tr>`);
     }
     if(i===7){
-      const div = document.createElement("tr");
-      div.className = "week-divider";
-      div.innerHTML = `<td colspan="8">Week 2</td>`;
-      body.appendChild(div);
+      body.insertAdjacentHTML("beforeend", `<tr class="week-divider"><td colspan="8">Week 2</td></tr>`);
     }
 
     const d = new Date(startDate);
     d.setDate(d.getDate()+i);
 
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="center">
-        <div class="dateText">${formatDateShort(d)}</div>
-        <input type="hidden" data-role="dateISO" value="${formatDateISO(d)}">
-      </td>
-      <td class="center">${dayName(d)}</td>
+    body.insertAdjacentHTML("beforeend", `
+      <tr>
+        <td class="center">
+          <div class="dateText">${formatDateShort(d)}</div>
+          <input type="hidden" value="${formatDateISO(d)}">
+        </td>
+        <td class="center">${dayName(d)}</td>
 
-      <td>
-        <input type="time" data-role="in1">
-        <span class="print-value" data-role="p_in1"></span>
-      </td>
-      <td>
-        <input type="time" data-role="out1">
-        <span class="print-value" data-role="p_out1"></span>
-      </td>
+        <td><input type="time" data-role="in1"><span class="print-value" data-role="p_in1"></span></td>
+        <td><input type="time" data-role="out1"><span class="print-value" data-role="p_out1"></span></td>
+        <td><input type="time" data-role="in2"><span class="print-value" data-role="p_in2"></span></td>
+        <td><input type="time" data-role="out2"><span class="print-value" data-role="p_out2"></span></td>
 
-      <td>
-        <input type="time" data-role="in2">
-        <span class="print-value" data-role="p_in2"></span>
-      </td>
-      <td>
-        <input type="time" data-role="out2">
-        <span class="print-value" data-role="p_out2"></span>
-      </td>
-
-      <td class="total-cell">
-        <span data-role="dayTotal">0.00</span>
-      </td>
-
-      <td>
-        <input type="text" data-role="notes">
-        <span class="print-value" data-role="p_notes"></span>
-      </td>
-    `;
-
-    body.appendChild(tr);
+        <td class="total-cell"><span data-role="dayTotal">0.00</span></td>
+        <td><input type="text" data-role="notes"><span class="print-value" data-role="p_notes"></span></td>
+      </tr>
+    `);
   }
 
-  // live recalc
   body.querySelectorAll("input").forEach(inp => inp.addEventListener("input", recalcAll));
   recalcAll();
 }
@@ -126,49 +109,39 @@ function computeRowHours(tr){
   const out1 = parseTimeToMinutes(tr.querySelector('[data-role="out1"]').value);
   const in2 = parseTimeToMinutes(tr.querySelector('[data-role="in2"]').value);
   const out2 = parseTimeToMinutes(tr.querySelector('[data-role="out2"]').value);
-
-  const mins1 = minutesDiff(in1, out1);
-  const mins2 = minutesDiff(in2, out2);
-
-  return round2((mins1 + mins2) / 60);
+  return round2((minutesDiff(in1,out1) + minutesDiff(in2,out2)) / 60);
 }
 
 function recalcAll(){
   let grand = 0;
-
   $("#tableBody").querySelectorAll("tr").forEach(tr => {
     if(tr.classList.contains("week-divider")) return;
-    // if placeholder row (no inputs)
     if(!tr.querySelector('[data-role="in1"]')) return;
-
     const hrs = computeRowHours(tr);
     tr.querySelector('[data-role="dayTotal"]').textContent = hrs.toFixed(2);
     grand += hrs;
   });
-
   grand = round2(grand);
   $("#grandTotal").textContent = grand.toFixed(2);
   $("#grandTotal2").textContent = grand.toFixed(2);
 }
 
-// Prepare print values (so printed report shows times + notes)
+// 🔹 UPDATED PRINT VALUES (12-hour format)
 function fillPrintValues(){
-  // header values
   ["employeeName","employeeTitle","weekStarting"].forEach(id => {
     const inp = document.getElementById(id);
     const span = document.querySelector(`[data-print-for="${id}"]`);
     if(span) span.textContent = inp.value || "";
   });
 
-  // table values
   $("#tableBody").querySelectorAll("tr").forEach(tr => {
     if(tr.classList.contains("week-divider")) return;
     if(!tr.querySelector('[data-role="in1"]')) return;
 
-    tr.querySelector('[data-role="p_in1"]').textContent = tr.querySelector('[data-role="in1"]').value || "";
-    tr.querySelector('[data-role="p_out1"]').textContent = tr.querySelector('[data-role="out1"]').value || "";
-    tr.querySelector('[data-role="p_in2"]').textContent = tr.querySelector('[data-role="in2"]').value || "";
-    tr.querySelector('[data-role="p_out2"]').textContent = tr.querySelector('[data-role="out2"]').value || "";
+    tr.querySelector('[data-role="p_in1"]').textContent = formatTime12h(tr.querySelector('[data-role="in1"]').value);
+    tr.querySelector('[data-role="p_out1"]').textContent = formatTime12h(tr.querySelector('[data-role="out1"]').value);
+    tr.querySelector('[data-role="p_in2"]').textContent = formatTime12h(tr.querySelector('[data-role="in2"]').value);
+    tr.querySelector('[data-role="p_out2"]').textContent = formatTime12h(tr.querySelector('[data-role="out2"]').value);
     tr.querySelector('[data-role="p_notes"]').textContent = tr.querySelector('[data-role="notes"]').value || "";
   });
 
@@ -176,22 +149,11 @@ function fillPrintValues(){
 }
 
 function init(){
-  // IMPORTANT: do NOT force dates to "today"
-  // User must choose Week Starting so dates match the timesheet entry.
-  $("#weekStarting").value = ""; 
+  $("#weekStarting").value = "";
   buildRowsFromWeekStarting();
 
   $("#weekStarting").addEventListener("change", () => {
-    if(anyHoursEntered()){
-      const ok = confirm("Changing Week Starting will reset the dates and clear the current entries. Continue?");
-      if(!ok){
-        // revert by re-building current (no change)
-        // NOTE: can't restore prior date without storage; so just keep rows as-is by canceling change:
-        // We reload by setting back to empty and letting user reselect if needed.
-        // Best simple behavior: rebuild anyway only when user confirms.
-        return;
-      }
-    }
+    if(anyHoursEntered() && !confirm("Changing Week Starting will clear current entries. Continue?")) return;
     buildRowsFromWeekStarting();
   });
 
@@ -204,7 +166,6 @@ function init(){
     if(confirm("Clear all entries?")){
       $("#employeeName").value = "";
       $("#employeeTitle").value = "";
-      // keep weekStarting, just rebuild clean rows for that week
       buildRowsFromWeekStarting();
     }
   });
